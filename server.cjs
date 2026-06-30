@@ -1,12 +1,21 @@
 const express = require("express");
 const http = require("http");
 const path = require("path");
+const cors = require("cors");
 const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
 
+// 1. Core Middleware Configuration
+app.use(cors());
+app.use(express.json());
+
+// 2. High-Performance Socket.io Settings (Fixes proxy & 10-second drops)
 const io = new Server(server, {
+  pingTimeout: 60000,                  // Gives a full 60s window for network drops to recover
+  pingInterval: 10000,                 // Continuous 10s ping loop forces proxies to stay alive
+  transports: ["websocket", "polling"], // Dual transport allows instant backup if websockets stall
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
@@ -16,12 +25,14 @@ const io = new Server(server, {
 const users = new Map();
 const calls = new Map();
 
+// Helper: Extract current online snapshot state
 const presenceSnapshot = () =>
   Array.from(users.entries()).reduce((acc, [uid, value]) => {
     acc[uid] = value.sockets.size > 0;
     return acc;
   }, {});
 
+// Helper: Handle active socket identification mappings
 const registerSocket = (socket, user) => {
   if (!user?.uid) return;
   const existing = users.get(user.uid) || {
@@ -45,12 +56,23 @@ const emitToUsers = (uids, event, payload) => {
   [...new Set(uids.filter(Boolean))].forEach((uid) => io.to(uid).emit(event, payload));
 };
 
+// 3. Bidirectional WebRTC Signaling Operations
 io.on("connection", (socket) => {
   socket.on("register-user", (user) => registerSocket(socket, user));
   socket.on("register", (uid) => registerSocket(socket, { uid }));
 
   socket.on("call-user", (payload) => {
-    const targetUids = payload.targetUids || payload.participantUids?.filter((uid) => uid !== payload.callerUid) || [];
+    // Robust target mapping to support flawless HR-to-User & User-to-HR pathways
+    let targetUids = payload.targetUids || [];
+    
+    if (targetUids.length === 0 && payload.participantUids) {
+      targetUids = payload.participantUids.filter((uid) => String(uid) !== String(payload.callerUid));
+    }
+    
+    if (targetUids.length === 0 && payload.receiverUid) {
+      targetUids = [payload.receiverUid];
+    }
+
     calls.set(payload.callId, {
       callId: payload.callId,
       threadId: payload.threadId,
@@ -143,12 +165,21 @@ io.on("connection", (socket) => {
   });
 });
 
+// 4. Static File Asset Routing (Serves compiled React frontend build output)
 app.use(express.static(path.join(__dirname, "dist")));
-app.use((req, res) => {
+
+// Optional API verification routing path
+app.get('/api/users', (req, res) => {
+  res.json({ message: "Monolithic signaling application status: active" });
+});
+
+// Express 5 named parameter syntax: Catches all routes for clean frontend refreshes
+app.get("/*splat", (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
+// 5. Port Listening Initializer (Supports environment ports dynamically)
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Communication server running on port ${PORT}`);
+  console.log(`Communication monolithic server running on port ${PORT}`);
 });
