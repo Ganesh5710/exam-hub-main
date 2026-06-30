@@ -152,21 +152,3 @@ const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`Communication server running on ${PORT}`);
 });
-
-// ... Your existing express setup (express, cors, supabase initialization, etc.) ...
-const express = require('express');
-const app = express();
-
-app.use(express.json());
-
-// Example API Endpoint
-app.get('/api/users', (req, res) => {
-  res.json({ message: "Hello from serverless backend!" });
-});
-
-// CRITICAL FOR VERCEL: Export the app instead of just doing app.listen()
-if (process.env.NODE_ENV !== 'production') {
-  app.listen(3001, () => console.log('Running locally on 3001'));
-}
-
-module.exports = app;
