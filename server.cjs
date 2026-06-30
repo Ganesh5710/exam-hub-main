@@ -149,6 +149,6 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`Communication server running on ${PORT}`);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Communication server running on port ${PORT}`);
 });
